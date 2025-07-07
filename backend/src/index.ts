@@ -14,6 +14,8 @@
 // import { parse } from 'node-html-parser'; // Not used, remove
 import { generateVerificationCode, verifyLeetCodeProfile } from './leetcodeVerify';
 import { generateVerificationCode as generateCodeforcesCode, verifyCodeforcesProfile } from './codeforcesVerify';
+import { generateVerificationCode as generateAtcoderCode, verifyAtcoderProfile } from './atcoderVerify';
+import { generateVerificationCode as generateCodechefCode, verifyCodechefProfile } from './codechefVerify';
 import { PrismaClient } from '@prisma/client/edge'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
@@ -23,6 +25,16 @@ interface LeetCodeVerifyRequest {
 }
 
 interface CodeforcesVerifyRequest {
+	handle: string;
+	action?: 'generate' | 'verify';
+}
+
+interface AtcoderVerifyRequest {
+	handle: string;
+	action?: 'generate' | 'verify';
+}
+
+interface CodechefVerifyRequest {
 	handle: string;
 	action?: 'generate' | 'verify';
 }
@@ -89,6 +101,66 @@ async function handleCodeforcesVerify(request: Request): Promise<Response> {
 	}
 }
 
+// AtCoder handlers
+async function handleAtcoderGenerate(request: Request): Promise<Response> {
+	const { handle } = (await request.json()) as AtcoderVerifyRequest;
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+	const code = await generateAtcoderCode(handle, 'atcoder');
+	return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleAtcoderStatus(request: Request): Promise<Response> {
+	const url = new URL(request.url);
+	const handle = url.searchParams.get('handle');
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+	const record = await prisma.userVerification.findFirst({
+		where: { handle, platform: 'atcoder' },
+	});
+	if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
+	return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleAtcoderVerify(request: Request): Promise<Response> {
+	const { handle } = (await request.json()) as AtcoderVerifyRequest;
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+	const result = await verifyAtcoderProfile(handle);
+	if (result.verified) {
+		return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
+	} else {
+		return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
+	}
+}
+
+// Codechef handlers
+async function handleCodechefGenerate(request: Request): Promise<Response> {
+	const { handle } = (await request.json()) as CodechefVerifyRequest;
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+	const code = await generateCodechefCode(handle, 'codechef');
+	return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleCodechefStatus(request: Request): Promise<Response> {
+	const url = new URL(request.url);
+	const handle = url.searchParams.get('handle');
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+	const record = await prisma.userVerification.findFirst({
+		where: { handle, platform: 'codechef' },
+	});
+	if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
+	return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleCodechefVerify(request: Request): Promise<Response> {
+	const { handle } = (await request.json()) as CodechefVerifyRequest;
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+	const result = await verifyCodechefProfile(handle);
+	if (result.verified) {
+		return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
+	} else {
+		return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
+	}
+}
+
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
@@ -111,6 +183,26 @@ export default {
 		}
 		if (url.pathname === '/api/codeforces-verify' && request.method === 'POST') {
 			return await handleCodeforcesVerify(request);
+		}
+		
+		if (url.pathname === '/api/atcoder-verify/generate' && request.method === 'POST') {
+			return await handleAtcoderGenerate(request);
+		}
+		if (url.pathname === '/api/atcoder-verify/status' && request.method === 'GET') {
+			return await handleAtcoderStatus(request);
+		}
+		if (url.pathname === '/api/atcoder-verify' && request.method === 'POST') {
+			return await handleAtcoderVerify(request);
+		}
+		
+		if (url.pathname === '/api/codechef-verify/generate' && request.method === 'POST') {
+			return await handleCodechefGenerate(request);
+		}
+		if (url.pathname === '/api/codechef-verify/status' && request.method === 'GET') {
+			return await handleCodechefStatus(request);
+		}
+		if (url.pathname === '/api/codechef-verify' && request.method === 'POST') {
+			return await handleCodechefVerify(request);
 		}
 		
 		return new Response('Hello World!');
