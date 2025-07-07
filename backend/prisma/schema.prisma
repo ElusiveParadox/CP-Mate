@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserVerification {
+  id        String   @id @default(uuid())
+  handle    String
+  platform  String
+  code      String
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  User      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+
+  // Add composite unique constraint for handle + platform
+  @@unique([handle, platform], name: "handle_platform")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  handle      String   @unique
+  email       String   @unique
+  displayName String?
+  avatarUrl   String?
+  country     String?
+  university  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Platform handles
+  codeforcesHandle String?
+  leetcodeHandle   String?
+  codechefHandle   String?
+  atcoderHandle    String?
+
+  // Stats (can be expanded as needed)
+  totalSolved      Int     @default(0)
+  totalSubmissions Int     @default(0)
+  streak           Int     @default(0)
+  rating           Int?
+  contestRank      String?
+  awards           Int     @default(0)
+
+  // Relations
+  verifications UserVerification[]
+}
