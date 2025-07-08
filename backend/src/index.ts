@@ -19,6 +19,7 @@ import { fetchLeetCodeData } from './leetcodeData';
 import { verifyToken } from '@clerk/backend';
 import { prisma } from './db';
 import { getUserById } from './user';
+import { fetchAndStoreCodeforcesProfile } from './codeforcesData';
 
 interface LeetCodeVerifyRequest {
 	handle: string;
@@ -354,6 +355,20 @@ async function handleLeetCodeData(request: Request, user: AuthenticatedUser, env
 	}
 }
 
+async function handleCodeforcesData(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+	const url = new URL(request.url);
+	const handle = url.searchParams.get('handle');
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+
+	try {
+		const { profile, submissions } = await fetchAndStoreCodeforcesProfile(handle, user.id);
+		return new Response(JSON.stringify({ profile, submissions }), { headers: { 'Content-Type': 'application/json' } });
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		return new Response(JSON.stringify({ error: message }), { status: 500 });
+	}
+}
+
 // User data handler
 async function handleGetUser(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
 	const userData = await getUserById(user.id);
@@ -431,6 +446,10 @@ export default {
 			return await withAuth(request, env, handleLeetCodeData);
 		}
 
+		if (url.pathname === '/api/codeforces-data' && request.method === 'GET') {
+			return await withAuth(request, env, handleCodeforcesData);
+		}
+
 		if (url.pathname === '/api/user' && request.method === 'GET') {
 			return await withAuth(request, env, handleGetUser);
 		}
@@ -463,6 +482,8 @@ export default {
 			response = await withAuth(request, env, handleCodechefVerify);
 		} else if (url.pathname === '/api/leetcode-data' && request.method === 'GET') {
 			response = await withAuth(request, env, handleLeetCodeData);
+		} else if (url.pathname === '/api/codeforces-data' && request.method === 'GET') {
+			response = await withAuth(request, env, handleCodeforcesData);
 		} else if (url.pathname === '/api/user' && request.method === 'GET') {
 			response = await withAuth(request, env, handleGetUser);
 		} else {

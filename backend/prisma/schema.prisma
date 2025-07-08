@@ -59,8 +59,9 @@ model User {
   awards           Int     @default(0)
 
   // Relations
-  verifications    UserVerification[]
-  leetcodeProfile  LeetCodeProfile?
+  verifications       UserVerification[]
+  leetcodeProfile     LeetCodeProfile?
+  codeforcesProfile   CodeforcesProfile?
 }
 
 model LeetCodeProfile {
@@ -86,4 +87,29 @@ model LeetCodeProfile {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model CodeforcesProfile {
+  id       String  @id @default(uuid())
+  user     User    @relation(fields: [userId], references: [id])
+  userId   String  @unique
+  handle   String  @unique
+
+  firstName   String?
+  lastName    String?
+  avatar      String?
+  country     String?
+  city        String?
+  organization String?
+  contribution Int?                 // CF contribution
+  rank        String?               // e.g. "legendary grandmaster"
+  maxRank     String?
+  rating      Int?                  // current rating
+  maxRating   Int?                  // peak rating
+  friendOfCount Int?                // followers / friends
+  registrationTimeSeconds Int?      // epoch seconds
+  submissions Json?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
