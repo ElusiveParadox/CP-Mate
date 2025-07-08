@@ -43,3 +43,6 @@ next-env.d.ts
 #keys
 .env.local
 
+
+# clerk configuration (can include secrets)
+/.clerk/

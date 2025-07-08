@@ -11,7 +11,6 @@
 		"enabled": true
 	},
 	"vars": {
-	  "DATABASE_URL": "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlfa2V5IjoiMDFKWkdOMzNRUFFaODczQUJUWjdRODdFMlIiLCJ0ZW5hbnRfaWQiOiI2OTQ1ZDA3MTc4ZWFjNDI5NDYwMDIwOTEwNTM4MTBhNWRmOWU1NTFlNjJmYjBiZTkwNzAyMjc2MWU2NDRmNzUzIiwiaW50ZXJuYWxfc2VjcmV0IjoiNDFhOWRjODQtNzEyZS00NTk5LTlmOGEtYjJhYzc1ZmU3NWNkIn0.1tuC4S7jj7QZO9GMjL4TEvCLg6av34uDRLHCkDVaCGk"
 	}
 	/**
 	 * Smart Placement

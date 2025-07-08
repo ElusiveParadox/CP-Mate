@@ -73,7 +73,8 @@ export async function fetchCodeforcesProfilePage(handle: string): Promise<string
 }
 
 export async function verifyCodeforcesProfile(
-  handle: string
+  handle: string,
+  userId: string
 ): Promise<{ verified: boolean; reason?: string }> {
   const record = await prisma.userVerification.findFirst({
     where: { handle, platform: 'codeforces' },
@@ -85,10 +86,15 @@ export async function verifyCodeforcesProfile(
     // First verify the user exists via API
     const userInfo = await fetchCodeforcesProfileInfo(handle);
     
-    if (userInfo["organization"]===(record.code)) {
+    if (userInfo["organization"] === record.code) {
       await prisma.userVerification.update({
         where: { id: record.id },
         data: { verified: true },
+      });
+      // Update the user's codeforcesHandle
+      await prisma.user.update({
+        where: { id: userId },
+        data: { codeforcesHandle: handle },
       });
       return { verified: true };
     } else {

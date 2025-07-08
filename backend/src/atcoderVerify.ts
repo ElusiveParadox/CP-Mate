@@ -35,7 +35,8 @@ export async function fetchAtcoderProfileDescription(handle: string): Promise<st
 }
 
 export async function verifyAtcoderProfile(
-  handle: string
+  handle: string,
+  userId: string
 ): Promise<{ verified: boolean; reason?: string }> {
   const record = await prisma.userVerification.findFirst({
     where: { handle, platform: 'atcoder' },
@@ -49,6 +50,11 @@ export async function verifyAtcoderProfile(
       await prisma.userVerification.update({
         where: { id: record.id },
         data: { verified: true },
+      });
+      // Update the user's atcoderHandle
+      await prisma.user.update({
+        where: { id: userId },
+        data: { atcoderHandle: handle },
       });
       return { verified: true };
     } else {

@@ -39,7 +39,7 @@ export default function SignInPage() {
           path="/auth/sign-in"
           routing="path"
           signUpUrl="/auth/sign-up"
-          redirectUrl="/auth/sign-in?status=signed_in" 
+          redirectUrl="/auth/sign-in?status=signed_in"
         />
       </div>
     </>

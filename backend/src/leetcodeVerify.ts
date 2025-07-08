@@ -72,7 +72,7 @@ export async function fetchLeetCodeProfileSummary(handle: string): Promise<strin
   }
   
 
-export async function verifyLeetCodeProfile(handle: string): Promise<{ verified: boolean; reason?: string }> {
+export async function verifyLeetCodeProfile(handle: string, userId?: string): Promise<{ verified: boolean; reason?: string }> {
 	const record = await prisma.userVerification.findFirst({
 		where: { handle, platform: 'leetcode' },
 	});

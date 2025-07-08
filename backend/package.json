@@ -11,14 +11,19 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"@types/cors": "^2.8.19",
 		"prisma": "^6.11.1",
 		"typescript": "^5.5.2",
 		"vitest": "~3.0.7",
 		"wrangler": "^4.19.1"
 	},
 	"dependencies": {
+		"@clerk/backend": "^2.4.1",
 		"@prisma/client": "^6.11.1",
 		"@prisma/extension-accelerate": "^2.0.1",
-		"cheerio": "^1.1.0"
+		"cheerio": "^1.1.0",
+		"cors": "^2.8.5",
+		"hono": "^4.8.4",
+		"jose": "^6.0.11"
 	}
 }

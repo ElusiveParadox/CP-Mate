@@ -35,7 +35,8 @@ export async function fetchCodechefProfileName(handle: string): Promise<string> 
 }
 
 export async function verifyCodechefProfile(
-  handle: string
+  handle: string,
+  userId: string
 ): Promise<{ verified: boolean; reason?: string }> {
   const record = await prisma.userVerification.findFirst({
     where: { handle, platform: 'codechef' },
@@ -49,6 +50,11 @@ export async function verifyCodechefProfile(
       await prisma.userVerification.update({
         where: { id: record.id },
         data: { verified: true },
+      });
+      // Update the user's codechefHandle
+      await prisma.user.update({
+        where: { id: userId },
+        data: { codechefHandle: handle },
       });
       return { verified: true };
     } else {

@@ -5,12 +5,12 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlfa2V5IjoiMDFKWkdOMzNRUFFaODczQUJUWjdRODdFMlIiLCJ0ZW5hbnRfaWQiOiI2OTQ1ZDA3MTc4ZWFjNDI5NDYwMDIwOTEwNTM4MTBhNWRmOWU1NTFlNjJmYjBiZTkwNzAyMjc2MWU2NDRmNzUzIiwiaW50ZXJuYWxfc2VjcmV0IjoiNDFhOWRjODQtNzEyZS00NTk5LTlmOGEtYjJhYzc1ZmU3NWNkIn0.1tuC4S7jj7QZO9GMjL4TEvCLg6av34uDRLHCkDVaCGk"
 }
 
 model UserVerification {
@@ -32,18 +32,23 @@ model User {
   id          String   @id @default(uuid())
   handle      String   @unique
   email       String   @unique
-  displayName String?
+  firstName   String?
+  lastName    String?
+  bio         String?
+  branch      String?
   avatarUrl   String?
   country     String?
+  passout     String?
+  degree      String?
   university  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Platform handles
-  codeforcesHandle String?
-  leetcodeHandle   String?
-  codechefHandle   String?
-  atcoderHandle    String?
+  codeforcesHandle String? @unique
+  leetcodeHandle   String? @unique
+  codechefHandle   String? @unique
+  atcoderHandle    String? @unique
 
   // Stats (can be expanded as needed)
   totalSolved      Int     @default(0)
@@ -54,5 +59,31 @@ model User {
   awards           Int     @default(0)
 
   // Relations
-  verifications UserVerification[]
+  verifications    UserVerification[]
+  leetcodeProfile  LeetCodeProfile?
+}
+
+model LeetCodeProfile {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String   @unique
+  username    String   @unique
+  avatar      String?
+  realName    String?
+  ranking     Int?
+  reputation  Int?
+
+  // Contest stats
+  attendedContestsCount Int?
+  rating               Float?
+  globalRanking        Int?
+  topPercentage        Float?
+
+  // Submission stats (store as JSON for flexibility)
+  acSubmissionNum      Json?
+  totalSubmissionNum   Json?
+  recentAcSubmissions  Json?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
