@@ -20,6 +20,8 @@ import { verifyToken } from '@clerk/backend';
 import { prisma } from './db';
 import { getUserById } from './user';
 import { fetchAndStoreCodeforcesProfile } from './codeforcesData';
+import { fetchAndStoreAtcoderSubmissions } from './atcoderdata';
+import { load as cheerioLoad } from 'cheerio';
 
 interface LeetCodeVerifyRequest {
 	handle: string;
@@ -311,11 +313,6 @@ async function handleLeetCodeData(request: Request, user: AuthenticatedUser, env
 			return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
 		}
 		
-		// Optional: Check if the authenticated user has permission to access this data
-		// if (user.id !== userRecord.id) {
-		//     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403 });
-		// }
-		
 		const leetcodeProfile = await prisma.leetCodeProfile.upsert({
 			where: { userId: userRecord.id },
 			update: {
@@ -369,6 +366,21 @@ async function handleCodeforcesData(request: Request, user: AuthenticatedUser, e
 	}
 }
 
+// AtCoder data handler
+async function handleAtcoderData(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+	const url = new URL(request.url);
+	const handle = url.searchParams.get('handle');
+	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+
+	try {
+		const submissions = await fetchAndStoreAtcoderSubmissions(handle, user.id);
+		return new Response(JSON.stringify({ submissions }), { headers: { 'Content-Type': 'application/json' } });
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		return new Response(JSON.stringify({ error: message }), { status: 500 });
+	}
+}
+
 // User data handler
 async function handleGetUser(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
 	const userData = await getUserById(user.id);
@@ -377,6 +389,111 @@ async function handleGetUser(request: Request, user: AuthenticatedUser, env: Env
 	}
 	return new Response(JSON.stringify(userData), { headers: { 'Content-Type': 'application/json' } });
 }
+
+export async function handleCodechefDataTest(request: Request): Promise<Response> {
+	const url = new URL(request.url);
+	const handle = url.searchParams.get('handle');
+
+	if (!handle) {
+		return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+	}
+
+	const profileUrl = `https://www.codechef.com/users/${handle}`;
+
+	try {
+		const res = await fetch(profileUrl, {
+			headers: {
+				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+				'Accept': 'text/html',
+				'Referer': profileUrl,
+			},
+		});
+
+		if (!res.ok) {
+			throw new Error(`Failed to fetch CodeChef profile for '${handle}'`);
+		}
+
+		const html = await res.text();
+		const $ = cheerioLoad(html);
+
+		console.log(html)
+
+		const avatarUrl = $('.user-details-container img').attr('src') ?? null;
+		const country = $('.user-country-name').text().trim() || null;
+		const institution = $('.user-institution-name').text().trim() || null;
+
+		const rankText = $('.rating-ranks .global .rank').text().replace(/[^0-9]/g, '');
+		const rank = rankText ? parseInt(rankText) : null;
+
+		const ratingText = $('.rating-number').first().text().trim();
+		const rating = ratingText ? parseInt(ratingText) : null;
+
+		const highestRatingText = $('.rating-header small').text().replace(/[^0-9]/g, '');
+		const highestRating = highestRatingText ? parseInt(highestRatingText) : null;
+
+		const stars = $('.user-profile-left .rating-star').length || null;
+
+		let fullySolved: number | null = null;
+		let partiallySolved: number | null = null;
+
+		$('.problems-solved .content h5').each((_, el) => {
+			const label = $(el).text().toLowerCase();
+			const valText = $(el).next('span').text().replace(/[^0-9]/g, '');
+			const value = valText ? parseInt(valText) : null;
+
+			if (label.includes('fully')) fullySolved = value;
+			if (label.includes('partially')) partiallySolved = value;
+		});
+
+		let recentActivity: { time: string; problem: string; result: string; lang: string; solution: string }[] = [];
+		try {
+			const activityRes = await fetch(`https://www.codechef.com/recent/user?user_handle=${handle}`, {
+				headers: {
+					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+					'Accept': 'application/json',
+					'Referer': profileUrl,
+				},
+			});
+			if (activityRes.ok) {
+				const activityJson = await activityRes.json() as any;
+				const content = activityJson.content || '';
+				const $activity = cheerioLoad(content);
+				$activity('table tbody tr').each((_, row) => {
+					const cols = $activity(row).find('td');
+					recentActivity.push({
+						time: $activity(cols[0]).text().trim(),
+						problem: $activity(cols[1]).text().trim(),
+						result: $activity(cols[2]).text().trim(),
+						lang: $activity(cols[3]).text().trim(),
+						solution: $activity(cols[4]).find('a').attr('href') ? `https://www.codechef.com${$activity(cols[4]).find('a').attr('href')}` : '',
+					});
+				});
+			}
+		} catch (err) {
+		}
+
+		return new Response(JSON.stringify({
+			username: handle,
+			avatarUrl,
+			country,
+			institution,
+			rank,
+			rating,
+			highestRating,
+			stars,
+			fullySolved,
+			partiallySolved,
+			recentActivity,
+		}), {
+			headers: { 'Content-Type': 'application/json' },
+		});
+
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		return new Response(JSON.stringify({ error: message }), { status: 500 });
+	}
+}
+
 
 // CORS headers
 const CORS_HEADERS = {
@@ -450,8 +567,16 @@ export default {
 			return await withAuth(request, env, handleCodeforcesData);
 		}
 
+		if (url.pathname === '/api/atcoder-data' && request.method === 'GET') {
+			return await withAuth(request, env, handleAtcoderData);
+		}
+
 		if (url.pathname === '/api/user' && request.method === 'GET') {
 			return await withAuth(request, env, handleGetUser);
+		}
+
+		if (url.pathname === '/api/codechef-data-test' && request.method === 'GET') {
+			return await handleCodechefDataTest(request);
 		}
 
 		// Wrap all responses with CORS headers
@@ -484,8 +609,12 @@ export default {
 			response = await withAuth(request, env, handleLeetCodeData);
 		} else if (url.pathname === '/api/codeforces-data' && request.method === 'GET') {
 			response = await withAuth(request, env, handleCodeforcesData);
+		} else if (url.pathname === '/api/atcoder-data' && request.method === 'GET') {
+			response = await withAuth(request, env, handleAtcoderData);
 		} else if (url.pathname === '/api/user' && request.method === 'GET') {
 			response = await withAuth(request, env, handleGetUser);
+		} else if (url.pathname === '/api/codechef-data-test' && request.method === 'GET') {
+			response = await handleCodechefDataTest(request);
 		} else {
 			response = new Response('Hello World!');
 		}

@@ -29,20 +29,20 @@ model UserVerification {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  handle      String   @unique
-  email       String   @unique
-  firstName   String?
-  lastName    String?
-  bio         String?
-  branch      String?
-  avatarUrl   String?
-  country     String?
-  passout     String?
-  degree      String?
-  university  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  handle     String   @unique
+  email      String   @unique
+  firstName  String?
+  lastName   String?
+  bio        String?
+  branch     String?
+  avatarUrl  String?
+  country    String?
+  passout    String?
+  degree     String?
+  university String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // Platform handles
   codeforcesHandle String? @unique
@@ -59,57 +59,98 @@ model User {
   awards           Int     @default(0)
 
   // Relations
-  verifications       UserVerification[]
-  leetcodeProfile     LeetCodeProfile?
-  codeforcesProfile   CodeforcesProfile?
+  verifications     UserVerification[]
+  leetcodeProfile   LeetCodeProfile?
+  codeforcesProfile CodeforcesProfile?
+  AtcoderProfile    AtcoderProfile[]
+  CodechefProfile   CodechefProfile?
 }
 
 model LeetCodeProfile {
-  id          String   @id @default(uuid())
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String   @unique
-  username    String   @unique
-  avatar      String?
-  realName    String?
-  ranking     Int?
-  reputation  Int?
+  id         String  @id @default(uuid())
+  user       User    @relation(fields: [userId], references: [id])
+  userId     String  @unique
+  username   String  @unique
+  avatar     String?
+  realName   String?
+  ranking    Int?
+  reputation Int?
 
   // Contest stats
   attendedContestsCount Int?
-  rating               Float?
-  globalRanking        Int?
-  topPercentage        Float?
+  rating                Float?
+  globalRanking         Int?
+  topPercentage         Float?
 
   // Submission stats (store as JSON for flexibility)
-  acSubmissionNum      Json?
-  totalSubmissionNum   Json?
-  recentAcSubmissions  Json?
+  acSubmissionNum     Json?
+  totalSubmissionNum  Json?
+  recentAcSubmissions Json?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CodeforcesProfile {
-  id       String  @id @default(uuid())
-  user     User    @relation(fields: [userId], references: [id])
-  userId   String  @unique
-  handle   String  @unique
+  id     String @id @default(uuid())
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique
+  handle String @unique
 
-  firstName   String?
-  lastName    String?
-  avatar      String?
-  country     String?
-  city        String?
-  organization String?
-  contribution Int?                 // CF contribution
-  rank        String?               // e.g. "legendary grandmaster"
-  maxRank     String?
-  rating      Int?                  // current rating
-  maxRating   Int?                  // peak rating
-  friendOfCount Int?                // followers / friends
-  registrationTimeSeconds Int?      // epoch seconds
-  submissions Json?
+  firstName               String?
+  lastName                String?
+  avatar                  String?
+  country                 String?
+  city                    String?
+  organization            String?
+  contribution            Int? // CF contribution
+  rank                    String? // e.g. "legendary grandmaster"
+  maxRank                 String?
+  rating                  Int? // current rating
+  maxRating               Int? // peak rating
+  friendOfCount           Int? // followers / friends
+  registrationTimeSeconds Int? // epoch seconds
+  submissions             Json?
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AtcoderProfile {
+  id            BigInt    @id
+  user          User      @relation(fields: [userId], references: [id])
+  userId        String
+  contestId     String?
+  problemId     String?
+  language      String?
+  result        String?
+  point         Float?
+  executionTime Int?
+  codeLength    Int?
+  submittedAt   DateTime?
+
+  @@unique([userId, id])
+}
+
+model CodechefProfile {
+  id       String @id @default(uuid())
+  user     User   @relation(fields: [userId], references: [id])
+  userId   String @unique
+  username String @unique
+
+  avatarUrl       String?
+  country         String?
+  institution     String?
+  rank            Int? // Global rank
+  rating          Int?
+  highestRating   Int?
+  stars           Int? // Number of stars (1-7)
+  fullySolved     Int?
+  partiallySolved Int?
+
+  contestHistory    Json? // Store contest participation, performance
+  recentSubmissions Json? // Store last N submissions (problem name, status, lang, time, etc.)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
