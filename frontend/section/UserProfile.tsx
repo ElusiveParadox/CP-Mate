@@ -424,7 +424,7 @@ export default function UserProfile() {
         )}
 
         {/* Show LeetCode profile data if available */}
-        {profiles.leetcode && (
+        {/* {profiles.leetcode && (
           <div className="p-6 rounded-xl border border-green-300 backdrop-blur-lg bg-green-50/10 dark:bg-green-900/10">
             <h2 className="text-xl font-semibold mb-4 text-black dark:text-white">LeetCode Profile</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -442,7 +442,7 @@ export default function UserProfile() {
               </div>
             </div>
           </div>
-        )}
+        )} */}
 
         <div className="p-6 rounded-xl border border-blue-300 backdrop-blur-lg bg-white/10 dark:bg-white/10">
           <h2 className="text-xl font-semibold mb-4 text-black dark:text-white">Basic Details</h2>

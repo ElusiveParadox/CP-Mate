@@ -117,7 +117,7 @@ model CodeforcesProfile {
 }
 
 model AtcoderProfile {
-  id            BigInt    @id
+  id            String    @id
   user          User      @relation(fields: [userId], references: [id])
   userId        String
   contestId     String?

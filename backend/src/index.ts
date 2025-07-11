@@ -21,603 +21,500 @@ import { prisma } from './db';
 import { getUserById } from './user';
 import { fetchAndStoreCodeforcesProfile } from './codeforcesData';
 import { fetchAndStoreAtcoderSubmissions } from './atcoderdata';
-import { load as cheerioLoad } from 'cheerio';
 
 interface LeetCodeVerifyRequest {
-	handle: string;
-	action?: 'generate' | 'verify';
+  handle: string;
+  action?: 'generate' | 'verify';
 }
 
 interface CodeforcesVerifyRequest {
-	handle: string;
-	action?: 'generate' | 'verify';
+  handle: string;
+  action?: 'generate' | 'verify';
 }
 
 interface AtcoderVerifyRequest {
-	handle: string;
-	action?: 'generate' | 'verify';
+  handle: string;
+  action?: 'generate' | 'verify';
 }
 
 interface CodechefVerifyRequest {
-	handle: string;
-	action?: 'generate' | 'verify';
+  handle: string;
+  action?: 'generate' | 'verify';
 }
 
 interface AuthenticatedUser {
-	id: string; // This will be the Clerk user ID
-	handle: string;
-	email: string;
+  id: string;
+  handle: string;
+  email: string;
 }
 
-// Environment variables interface
 interface Env {
-	CLERK_PUBLISHABLE_KEY: string;
-	CLERK_SECRET_KEY: string;
-	CLERK_JWT_VERIFICATION_KEY: string; // Your Clerk public key for JWT verification
-	// Add other environment variables as needed
+  CLERK_PUBLISHABLE_KEY: string;
+  CLERK_SECRET_KEY: string;
+  CLERK_JWT_VERIFICATION_KEY: string;
 }
 
+// Helper functions
 function getSessionToken(req: Request): string | null {
-	// 1) look for Bearer header first (most explicit)
-	const auth = req.headers.get('authorization') || '';
-	const bearer = auth.match(/^Bearer\s+(.+)$/i);
-	if (bearer) return bearer[1];
-  
-	// 2) otherwise parse cookies
-	const cookieString = req.headers.get('cookie') || '';
-	const cookies = Object.fromEntries(
-	  cookieString.split(';').map(c => {
-		const [k, ...v] = c.trim().split('=');
-		return [k, decodeURIComponent(v.join('='))];
-	  }),
-	);
-  
-	// Clerk may use either cookie name depending on config
-	return cookies['__session'] || cookies['__clerk_session'] || null;
-  }
+  const auth = req.headers.get('authorization') || '';
+  const bearer = auth.match(/^Bearer\s+(.+)$/i);
+  if (bearer) return bearer[1];
 
-  export function getSessionIdFromJwt(jwt: string): string {
-	const parts = jwt.split('.');
-	if (parts.length !== 3) throw new Error('Invalid JWT format');
-  
-	// JWT payload is the 2nd part (base64url‑encoded)
-	const base64url = parts[1];
-  
-	// Convert base64url -> base64
-	const base64 = base64url
-	  .replace(/-/g, '+')
-	  .replace(/_/g, '/')
-	  .padEnd(base64url.length + (4 - (base64url.length % 4)) % 4, '=');
-  
-	// Decode JSON payload
-	const json = atob(base64);
-	const payload = JSON.parse(json);
-  
-	const sid = payload.sid;
-	if (typeof sid !== 'string') throw new Error('sid claim missing in JWT');
-  
-	return sid;
-  }
+  const cookieString = req.headers.get('cookie') || '';
+  const cookies = Object.fromEntries(
+    cookieString.split(';').map(c => {
+      const [k, ...v] = c.trim().split('=');
+      return [k, decodeURIComponent(v.join('='))];
+    }),
+  );
 
-  async function authenticateUser(request: Request, env: Env): Promise<AuthenticatedUser | null> {
-	const sessionToken = getSessionToken(request);
-	if (!sessionToken) return null;
-  
-	try {
-	  // Use Clerk's backend SDK for networkless verification
-	  const payload = await verifyToken(sessionToken, {
-		secretKey: env.CLERK_SECRET_KEY,
-	  });
-  
-	  const clerkUserId = payload.sub;
-  
-	  // Get user from your database
-	  const user = await prisma.user.findUnique({
-		where: { id: clerkUserId },
-		select: { id: true, handle: true, email: true },
-	  });
-  
-	  return user || null;
-	} catch (error) {
-	  console.error('Clerk backend verification failed:', error);
-	  return null;
-	}
-  }  
-
-  async function withAuth<T>(
-	request: Request,
-	env: Env,
-	handler: (request: Request, user: AuthenticatedUser, env: Env) => Promise<T>
-): Promise<Response> {
-	const user = await authenticateUser(request, env);
-	if (!user) {
-		return withCORSHeaders(new Response(
-			JSON.stringify({ error: 'Authentication required' }),
-			{ 
-				status: 401, 
-				headers: { 'Content-Type': 'application/json' }
-			}
-		));
-	}
-
-	try {
-		const result = await handler(request, user, env);
-		return withCORSHeaders(result as Response);
-	} catch (error) {
-		console.error('Handler error:', error);
-		return withCORSHeaders(new Response(
-			JSON.stringify({ error: 'Internal server error' }),
-			{ 
-				status: 500, 
-				headers: { 'Content-Type': 'application/json' }
-			}
-		));
-	}
+  return cookies['__session'] || cookies['__clerk_session'] || null;
 }
 
-// LeetCode handlers
+export function getSessionIdFromJwt(jwt: string): string {
+  const parts = jwt.split('.');
+  if (parts.length !== 3) throw new Error('Invalid JWT format');
+
+  const base64url = parts[1];
+  const base64 = base64url
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(base64url.length + (4 - (base64url.length % 4)) % 4, '=');
+
+  const json = atob(base64);
+  const payload = JSON.parse(json);
+
+  const sid = payload.sid;
+  if (typeof sid !== 'string') throw new Error('sid claim missing in JWT');
+
+  return sid;
+}
+
+async function authenticateUser(request: Request, env: Env): Promise<AuthenticatedUser | null> {
+  const sessionToken = getSessionToken(request);
+  if (!sessionToken) return null;
+
+  try {
+    const payload = await verifyToken(sessionToken, {
+      secretKey: env.CLERK_SECRET_KEY,
+    });
+
+    const clerkUserId = payload.sub;
+
+    const user = await prisma.user.findUnique({
+      where: { id: clerkUserId },
+      select: { id: true, handle: true, email: true },
+    });
+
+    return user || null;
+  } catch (error) {
+    console.error('Clerk backend verification failed:', error);
+    return null;
+  }
+}
+
+async function withAuth<T>(
+  request: Request,
+  env: Env,
+  handler: (request: Request, user: AuthenticatedUser, env: Env) => Promise<T>
+): Promise<Response> {
+  const user = await authenticateUser(request, env);
+  if (!user) {
+    return withCORSHeaders(new Response(
+      JSON.stringify({ error: 'Authentication required' }),
+      { 
+        status: 401, 
+        headers: { 'Content-Type': 'application/json' }
+      }
+    ));
+  }
+
+  try {
+    const result = await handler(request, user, env);
+    return withCORSHeaders(result as Response);
+  } catch (error) {
+    console.error('Handler error:', error);
+    return withCORSHeaders(new Response(
+      JSON.stringify({ error: 'Internal server error' }),
+      { 
+        status: 500, 
+        headers: { 'Content-Type': 'application/json' }
+      }
+    ));
+  }
+}
+
+// LeetCode Handlers
 async function handleLeetCodeGenerate(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as LeetCodeVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const code = await generateVerificationCode(handle, 'leetcode');
-	return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
+  const { handle } = (await request.json()) as LeetCodeVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const code = await generateVerificationCode(handle, 'leetcode');
+  return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
 }
 
 async function handleLeetCodeStatus(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const record = await prisma.userVerification.findFirst({
-		where: { handle, platform: 'leetcode' },
-	});
-	if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
-	
-	return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
-		headers: { 'Content-Type': 'application/json' },
-	});
+  const url = new URL(request.url);
+  const handle = url.searchParams.get('handle');
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const record = await prisma.userVerification.findFirst({
+    where: { handle, platform: 'leetcode' },
+  });
+  if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
+  
+  return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 async function handleLeetCodeVerify(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as LeetCodeVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  const { handle } = (await request.json()) as LeetCodeVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
 
-	const result = await verifyLeetCodeProfile(handle, user.id);
-	if (result.verified) {
-		await prisma.user.update({
-			where: { id: user.id },
-			data: { leetcodeHandle: handle },
-		});
-		return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
-	} else {
-		return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
-	}
-}
-
-async function handleCodeforcesGenerate(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as CodeforcesVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const code = await generateCodeforcesCode(handle, 'codeforces');
-	return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
-}
-
-async function handleCodeforcesStatus(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const record = await prisma.userVerification.findFirst({
-		where: { handle, platform: 'codeforces' },
-	});
-	if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
-	
-	return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
-		headers: { 'Content-Type': 'application/json' },
-	});
-}
-
-async function handleCodeforcesVerify(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as CodeforcesVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const result = await verifyCodeforcesProfile(handle, user.id);
-	if (result.verified) {
-		return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
-	} else {
-		return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
-	}
-}
-
-// AtCoder handlers
-async function handleAtcoderGenerate(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as AtcoderVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const code = await generateAtcoderCode(handle, 'atcoder');
-	return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
-}
-
-async function handleAtcoderStatus(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const record = await prisma.userVerification.findFirst({
-		where: { handle, platform: 'atcoder' },
-	});
-	if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
-	
-	return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
-		headers: { 'Content-Type': 'application/json' },
-	});
-}
-
-async function handleAtcoderVerify(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as AtcoderVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const result = await verifyAtcoderProfile(handle, user.id);
-	if (result.verified) {
-		return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
-	} else {
-		return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
-	}
-}
-
-async function handleCodechefGenerate(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as CodechefVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const code = await generateCodechefCode(handle, 'codechef');
-	return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
-}
-
-async function handleCodechefStatus(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const record = await prisma.userVerification.findFirst({
-		where: { handle, platform: 'codechef' },
-	});
-	if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
-	
-	return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
-		headers: { 'Content-Type': 'application/json' },
-	});
-}
-
-async function handleCodechefVerify(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const { handle } = (await request.json()) as CodechefVerifyRequest;
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	const result = await verifyCodechefProfile(handle, user.id);
-	if (result.verified) {
-		return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
-	} else {
-		return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
-	}
+  const result = await verifyLeetCodeProfile(handle, user.id);
+  if (result.verified) {
+    try {
+      // Update user's leetcodeHandle if not already set
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { leetcodeHandle: handle },
+      });
+      const data = await fetchLeetCodeData(handle);
+      const leetcodeProfile = await prisma.leetCodeProfile.upsert({
+        where: { userId: user.id },
+        update: {
+          username: data.username,
+          avatar: data.avatar,
+          realName: data.realName,
+          ranking: data.ranking,
+          reputation: data.reputation,
+          acSubmissionNum: data.acSubmissionNum,
+          totalSubmissionNum: data.totalSubmissionNum,
+          attendedContestsCount: data.attendedContestsCount,
+          rating: data.rating,
+          globalRanking: data.globalRanking,
+          topPercentage: data.topPercentage,
+          recentAcSubmissions: data.recentAcSubmissions,
+        },
+        create: {
+          userId: user.id,
+          username: data.username,
+          avatar: data.avatar,
+          realName: data.realName,
+          ranking: data.ranking,
+          reputation: data.reputation,
+          acSubmissionNum: data.acSubmissionNum,
+          totalSubmissionNum: data.totalSubmissionNum,
+          attendedContestsCount: data.attendedContestsCount,
+          rating: data.rating,
+          globalRanking: data.globalRanking,
+          topPercentage: data.topPercentage,
+          recentAcSubmissions: data.recentAcSubmissions,
+        },
+      });
+      return new Response(JSON.stringify({ verified: true, profile: leetcodeProfile }), { 
+        headers: { 'Content-Type': 'application/json' } 
+      });
+    } catch (e) {
+      console.error('Failed to fetch LeetCode data:', e);
+      return new Response(JSON.stringify({ verified: true }), { 
+        headers: { 'Content-Type': 'application/json' } 
+      });
+    }
+  } else {
+    return new Response(JSON.stringify({ verified: false, reason: result.reason }), { 
+      headers: { 'Content-Type': 'application/json' } 
+    });
+  }
 }
 
 async function handleLeetCodeData(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	
-	try {
-		const data = await fetchLeetCodeData(handle);
-		const userRecord = await prisma.user.findFirst({ where: { leetcodeHandle: handle } });
-		if (!userRecord) {
-			return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
-		}
-		
-		const leetcodeProfile = await prisma.leetCodeProfile.upsert({
-			where: { userId: userRecord.id },
-			update: {
-				username: data.username,
-				avatar: data.avatar,
-				realName: data.realName,
-				ranking: data.ranking,
-				reputation: data.reputation,
-				acSubmissionNum: data.acSubmissionNum,
-				totalSubmissionNum: data.totalSubmissionNum,
-				attendedContestsCount: data.attendedContestsCount,
-				rating: data.rating,
-				globalRanking: data.globalRanking,
-				topPercentage: data.topPercentage,
-				recentAcSubmissions: data.recentAcSubmissions,
-			},
-			create: {
-				userId: userRecord.id,
-				username: data.username,
-				avatar: data.avatar,
-				realName: data.realName,
-				ranking: data.ranking,
-				reputation: data.reputation,
-				acSubmissionNum: data.acSubmissionNum,
-				totalSubmissionNum: data.totalSubmissionNum,
-				attendedContestsCount: data.attendedContestsCount,
-				rating: data.rating,
-				globalRanking: data.globalRanking,
-				topPercentage: data.topPercentage,
-				recentAcSubmissions: data.recentAcSubmissions,
-			},
-		});
-		return new Response(JSON.stringify(leetcodeProfile), { headers: { 'Content-Type': 'application/json' } });
-	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
-		return new Response(JSON.stringify({ error: message }), { status: 500 });
-	}
+  const url = new URL(request.url);
+  const handle = url.searchParams.get('handle');
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  try {
+    const data = await fetchLeetCodeData(handle);
+    const leetcodeProfile = await prisma.leetCodeProfile.upsert({
+      where: { userId: user.id },
+      update: {
+        username: data.username,
+        avatar: data.avatar,
+        realName: data.realName,
+        ranking: data.ranking,
+        reputation: data.reputation,
+        acSubmissionNum: data.acSubmissionNum,
+        totalSubmissionNum: data.totalSubmissionNum,
+        attendedContestsCount: data.attendedContestsCount,
+        rating: data.rating,
+        globalRanking: data.globalRanking,
+        topPercentage: data.topPercentage,
+        recentAcSubmissions: data.recentAcSubmissions,
+      },
+      create: {
+        userId: user.id,
+        username: data.username,
+        avatar: data.avatar,
+        realName: data.realName,
+        ranking: data.ranking,
+        reputation: data.reputation,
+        acSubmissionNum: data.acSubmissionNum,
+        totalSubmissionNum: data.totalSubmissionNum,
+        attendedContestsCount: data.attendedContestsCount,
+        rating: data.rating,
+        globalRanking: data.globalRanking,
+        topPercentage: data.topPercentage,
+        recentAcSubmissions: data.recentAcSubmissions,
+      },
+    });
+    return new Response(JSON.stringify(leetcodeProfile), { headers: { 'Content-Type': 'application/json' } });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: message }), { status: 500 });
+  }
+}
+
+// Codeforces Handlers (keep existing implementations)
+async function handleCodeforcesGenerate(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const { handle } = (await request.json()) as CodeforcesVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const code = await generateCodeforcesCode(handle, 'codeforces');
+  return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleCodeforcesStatus(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const handle = url.searchParams.get('handle');
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const record = await prisma.userVerification.findFirst({
+    where: { handle, platform: 'codeforces' },
+  });
+  if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
+  
+  return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+async function handleCodeforcesVerify(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const { handle } = (await request.json()) as CodeforcesVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+
+  const result = await verifyCodeforcesProfile(handle, user.id);
+  if (result.verified) {
+    try {
+      const { profile, submissions } = await fetchAndStoreCodeforcesProfile(handle, user.id);
+      return new Response(JSON.stringify({ verified: true, profile, submissions }), { headers: { 'Content-Type': 'application/json' } });
+    } catch (e) {}
+    return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
+  } else {
+    return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
+  }
 }
 
 async function handleCodeforcesData(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  const url = new URL(request.url);
+  const handle = url.searchParams.get('handle');
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
 
-	try {
-		const { profile, submissions } = await fetchAndStoreCodeforcesProfile(handle, user.id);
-		return new Response(JSON.stringify({ profile, submissions }), { headers: { 'Content-Type': 'application/json' } });
-	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
-		return new Response(JSON.stringify({ error: message }), { status: 500 });
-	}
+  try {
+    const { profile, submissions } = await fetchAndStoreCodeforcesProfile(handle, user.id);
+    return new Response(JSON.stringify({ profile, submissions }), { headers: { 'Content-Type': 'application/json' } });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: message }), { status: 500 });
+  }
 }
 
-// AtCoder data handler
+// AtCoder Handlers (keep existing implementations)
+async function handleAtcoderGenerate(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const { handle } = (await request.json()) as AtcoderVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const code = await generateAtcoderCode(handle, 'atcoder');
+  return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleAtcoderStatus(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const handle = url.searchParams.get('handle');
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const record = await prisma.userVerification.findFirst({
+    where: { handle, platform: 'atcoder' },
+  });
+  if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
+  
+  return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+async function handleAtcoderVerify(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const { handle } = (await request.json()) as AtcoderVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  const result = await verifyAtcoderProfile(handle, user.id);
+  if (result.verified) {
+    try {
+      const submissions = await fetchAndStoreAtcoderSubmissions(handle, user.id);
+      return new Response(JSON.stringify({ verified: true, submissions }), { headers: { 'Content-Type': 'application/json' } });
+    } catch (e) {
+		console.error(e)
+	}
+    return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
+  } else {
+    return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
 async function handleAtcoderData(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-	if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  const url = new URL(request.url);
+  const handle = url.searchParams.get('handle');
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
 
-	try {
-		const submissions = await fetchAndStoreAtcoderSubmissions(handle, user.id);
-		return new Response(JSON.stringify({ submissions }), { headers: { 'Content-Type': 'application/json' } });
-	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
-		return new Response(JSON.stringify({ error: message }), { status: 500 });
-	}
+  try {
+    const submissions = await fetchAndStoreAtcoderSubmissions(handle, user.id);
+    return new Response(JSON.stringify({ submissions }), { headers: { 'Content-Type': 'application/json' } });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: message }), { status: 500 });
+  }
 }
 
-// User data handler
+// Codechef Handlers (keep existing implementations)
+async function handleCodechefGenerate(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const { handle } = (await request.json()) as CodechefVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const code = await generateCodechefCode(handle, 'codechef');
+  return new Response(JSON.stringify({ code }), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleCodechefStatus(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const handle = url.searchParams.get('handle');
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+  
+  const record = await prisma.userVerification.findFirst({
+    where: { handle, platform: 'codechef' },
+  });
+  if (!record) return new Response(JSON.stringify({ status: 'not_found' }), { headers: { 'Content-Type': 'application/json' } });
+  
+  return new Response(JSON.stringify({ status: record.verified ? 'verified' : 'pending', code: record.code }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+async function handleCodechefVerify(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
+  const { handle } = (await request.json()) as CodechefVerifyRequest;
+  if (!handle) return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
+
+  const result = await verifyCodechefProfile(handle, user.id);
+  if (result.verified) {
+    try {
+      const { fetchAndStoreCodechefProfile } = await import('./codechefVerify');
+      const profile = await fetchAndStoreCodechefProfile(handle, user.id);
+      return new Response(JSON.stringify({ verified: true, profile }), { headers: { 'Content-Type': 'application/json' } });
+    } catch (e) {}
+    return new Response(JSON.stringify({ verified: true }), { headers: { 'Content-Type': 'application/json' } });
+  } else {
+    return new Response(JSON.stringify({ verified: false, reason: result.reason }), { headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
+// User Data Handler
 async function handleGetUser(request: Request, user: AuthenticatedUser, env: Env): Promise<Response> {
-	const userData = await getUserById(user.id);
-	if (!userData) {
-		return new Response(JSON.stringify({ error: 'User not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-	}
-	return new Response(JSON.stringify(userData), { headers: { 'Content-Type': 'application/json' } });
+  const userData = await getUserById(user.id);
+  if (!userData) {
+    return new Response(JSON.stringify({ error: 'User not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+  }
+  return new Response(JSON.stringify(userData), { headers: { 'Content-Type': 'application/json' } });
 }
-
-export async function handleCodechefDataTest(request: Request): Promise<Response> {
-	const url = new URL(request.url);
-	const handle = url.searchParams.get('handle');
-
-	if (!handle) {
-		return new Response(JSON.stringify({ error: 'Missing handle' }), { status: 400 });
-	}
-
-	const profileUrl = `https://www.codechef.com/users/${handle}`;
-
-	try {
-		const res = await fetch(profileUrl, {
-			headers: {
-				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-				'Accept': 'text/html',
-				'Referer': profileUrl,
-			},
-		});
-
-		if (!res.ok) {
-			throw new Error(`Failed to fetch CodeChef profile for '${handle}'`);
-		}
-
-		const html = await res.text();
-		const $ = cheerioLoad(html);
-
-		console.log(html)
-
-		const avatarUrl = $('.user-details-container img').attr('src') ?? null;
-		const country = $('.user-country-name').text().trim() || null;
-		const institution = $('.user-institution-name').text().trim() || null;
-
-		const rankText = $('.rating-ranks .global .rank').text().replace(/[^0-9]/g, '');
-		const rank = rankText ? parseInt(rankText) : null;
-
-		const ratingText = $('.rating-number').first().text().trim();
-		const rating = ratingText ? parseInt(ratingText) : null;
-
-		const highestRatingText = $('.rating-header small').text().replace(/[^0-9]/g, '');
-		const highestRating = highestRatingText ? parseInt(highestRatingText) : null;
-
-		const stars = $('.user-profile-left .rating-star').length || null;
-
-		let fullySolved: number | null = null;
-		let partiallySolved: number | null = null;
-
-		$('.problems-solved .content h5').each((_, el) => {
-			const label = $(el).text().toLowerCase();
-			const valText = $(el).next('span').text().replace(/[^0-9]/g, '');
-			const value = valText ? parseInt(valText) : null;
-
-			if (label.includes('fully')) fullySolved = value;
-			if (label.includes('partially')) partiallySolved = value;
-		});
-
-		let recentActivity: { time: string; problem: string; result: string; lang: string; solution: string }[] = [];
-		try {
-			const activityRes = await fetch(`https://www.codechef.com/recent/user?user_handle=${handle}`, {
-				headers: {
-					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-					'Accept': 'application/json',
-					'Referer': profileUrl,
-				},
-			});
-			if (activityRes.ok) {
-				const activityJson = await activityRes.json() as any;
-				const content = activityJson.content || '';
-				const $activity = cheerioLoad(content);
-				$activity('table tbody tr').each((_, row) => {
-					const cols = $activity(row).find('td');
-					recentActivity.push({
-						time: $activity(cols[0]).text().trim(),
-						problem: $activity(cols[1]).text().trim(),
-						result: $activity(cols[2]).text().trim(),
-						lang: $activity(cols[3]).text().trim(),
-						solution: $activity(cols[4]).find('a').attr('href') ? `https://www.codechef.com${$activity(cols[4]).find('a').attr('href')}` : '',
-					});
-				});
-			}
-		} catch (err) {
-		}
-
-		return new Response(JSON.stringify({
-			username: handle,
-			avatarUrl,
-			country,
-			institution,
-			rank,
-			rating,
-			highestRating,
-			stars,
-			fullySolved,
-			partiallySolved,
-			recentActivity,
-		}), {
-			headers: { 'Content-Type': 'application/json' },
-		});
-
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		return new Response(JSON.stringify({ error: message }), { status: 500 });
-	}
-}
-
 
 // CORS headers
 const CORS_HEADERS = {
-	'Access-Control-Allow-Origin': 'http://localhost:3000',
-	'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-	'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Allow-Origin': 'http://localhost:3000',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Credentials': 'true',
 };
 
 function withCORSHeaders(response: Response): Response {
-	const newHeaders = new Headers(response.headers);
-	Object.entries(CORS_HEADERS).forEach(([k, v]) => newHeaders.set(k, v));
-	return new Response(response.body, { ...response, headers: newHeaders });
+  const newHeaders = new Headers(response.headers);
+  Object.entries(CORS_HEADERS).forEach(([k, v]) => newHeaders.set(k, v));
+  return new Response(response.body, { ...response, headers: newHeaders });
 }
 
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		const url = new URL(request.url);
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
 
-		// Handle CORS preflight requests globally
-		if (request.method === 'OPTIONS') {
-			return new Response(null, { status: 200, headers: CORS_HEADERS });
-		}
+    // Handle CORS preflight requests globally
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 200, headers: CORS_HEADERS });
+    }
 
-		// Apply authentication to all protected routes
-		if (url.pathname === '/api/leetcode-verify/generate' && request.method === 'POST') {
-			return await withAuth(request, env, handleLeetCodeGenerate);
-		}
-		if (url.pathname === '/api/leetcode-verify/status' && request.method === 'GET') {
-			return await withAuth(request, env, handleLeetCodeStatus);
-		}
-		if (url.pathname === '/api/leetcode-verify' && request.method === 'POST') {
-			return await withAuth(request, env, handleLeetCodeVerify);
-		}
+    // LeetCode routes
+    if (url.pathname === '/api/leetcode-verify/generate' && request.method === 'POST') {
+      return await withAuth(request, env, handleLeetCodeGenerate);
+    }
+    if (url.pathname === '/api/leetcode-verify/status' && request.method === 'GET') {
+      return await withAuth(request, env, handleLeetCodeStatus);
+    }
+    if (url.pathname === '/api/leetcode-verify' && request.method === 'POST') {
+      return await withAuth(request, env, handleLeetCodeVerify);
+    }
+    if (url.pathname === '/api/leetcode-data' && request.method === 'GET') {
+      return await withAuth(request, env, handleLeetCodeData);
+    }
 
-		if (url.pathname === '/api/codeforces-verify/generate' && request.method === 'POST') {
-			return await withAuth(request, env, handleCodeforcesGenerate);
-		}
-		if (url.pathname === '/api/codeforces-verify/status' && request.method === 'GET') {
-			return await withAuth(request, env, handleCodeforcesStatus);
-		}
-		if (url.pathname === '/api/codeforces-verify' && request.method === 'POST') {
-			return await withAuth(request, env, handleCodeforcesVerify);
-		}
+    // Codeforces routes
+    if (url.pathname === '/api/codeforces-verify/generate' && request.method === 'POST') {
+      return await withAuth(request, env, handleCodeforcesGenerate);
+    }
+    if (url.pathname === '/api/codeforces-verify/status' && request.method === 'GET') {
+      return await withAuth(request, env, handleCodeforcesStatus);
+    }
+    if (url.pathname === '/api/codeforces-verify' && request.method === 'POST') {
+      return await withAuth(request, env, handleCodeforcesVerify);
+    }
+    if (url.pathname === '/api/codeforces-data' && request.method === 'GET') {
+      return await withAuth(request, env, handleCodeforcesData);
+    }
 
-		if (url.pathname === '/api/atcoder-verify/generate' && request.method === 'POST') {
-			return await withAuth(request, env, handleAtcoderGenerate);
-		}
-		if (url.pathname === '/api/atcoder-verify/status' && request.method === 'GET') {
-			return await withAuth(request, env, handleAtcoderStatus);
-		}
-		if (url.pathname === '/api/atcoder-verify' && request.method === 'POST') {
-			return await withAuth(request, env, handleAtcoderVerify);
-		}
+    // AtCoder routes
+    if (url.pathname === '/api/atcoder-verify/generate' && request.method === 'POST') {
+      return await withAuth(request, env, handleAtcoderGenerate);
+    }
+    if (url.pathname === '/api/atcoder-verify/status' && request.method === 'GET') {
+      return await withAuth(request, env, handleAtcoderStatus);
+    }
+    if (url.pathname === '/api/atcoder-verify' && request.method === 'POST') {
+      return await withAuth(request, env, handleAtcoderVerify);
+    }
+    if (url.pathname === '/api/atcoder-data' && request.method === 'GET') {
+      return await withAuth(request, env, handleAtcoderData);
+    }
 
-		if (url.pathname === '/api/codechef-verify/generate' && request.method === 'POST') {
-			return await withAuth(request, env, handleCodechefGenerate);
-		}
-		if (url.pathname === '/api/codechef-verify/status' && request.method === 'GET') {
-			return await withAuth(request, env, handleCodechefStatus);
-		}
-		if (url.pathname === '/api/codechef-verify' && request.method === 'POST') {
-			return await withAuth(request, env, handleCodechefVerify);
-		}
+    // Codechef routes
+    if (url.pathname === '/api/codechef-verify/generate' && request.method === 'POST') {
+      return await withAuth(request, env, handleCodechefGenerate);
+    }
+    if (url.pathname === '/api/codechef-verify/status' && request.method === 'GET') {
+      return await withAuth(request, env, handleCodechefStatus);
+    }
+    if (url.pathname === '/api/codechef-verify' && request.method === 'POST') {
+      return await withAuth(request, env, handleCodechefVerify);
+    }
 
-		if (url.pathname === '/api/leetcode-data' && request.method === 'GET') {
-			return await withAuth(request, env, handleLeetCodeData);
-		}
+    // User route
+    if (url.pathname === '/api/user' && request.method === 'GET') {
+      return await withAuth(request, env, handleGetUser);
+    }
 
-		if (url.pathname === '/api/codeforces-data' && request.method === 'GET') {
-			return await withAuth(request, env, handleCodeforcesData);
-		}
-
-		if (url.pathname === '/api/atcoder-data' && request.method === 'GET') {
-			return await withAuth(request, env, handleAtcoderData);
-		}
-
-		if (url.pathname === '/api/user' && request.method === 'GET') {
-			return await withAuth(request, env, handleGetUser);
-		}
-
-		if (url.pathname === '/api/codechef-data-test' && request.method === 'GET') {
-			return await handleCodechefDataTest(request);
-		}
-
-		// Wrap all responses with CORS headers
-		let response: Response;
-		if (url.pathname === '/api/leetcode-verify/generate' && request.method === 'POST') {
-			response = await withAuth(request, env, handleLeetCodeGenerate);
-		} else if (url.pathname === '/api/leetcode-verify/status' && request.method === 'GET') {
-			response = await withAuth(request, env, handleLeetCodeStatus);
-		} else if (url.pathname === '/api/leetcode-verify' && request.method === 'POST') {
-			response = await withAuth(request, env, handleLeetCodeVerify);
-		} else if (url.pathname === '/api/codeforces-verify/generate' && request.method === 'POST') {
-			response = await withAuth(request, env, handleCodeforcesGenerate);
-		} else if (url.pathname === '/api/codeforces-verify/status' && request.method === 'GET') {
-			response = await withAuth(request, env, handleCodeforcesStatus);
-		} else if (url.pathname === '/api/codeforces-verify' && request.method === 'POST') {
-			response = await withAuth(request, env, handleCodeforcesVerify);
-		} else if (url.pathname === '/api/atcoder-verify/generate' && request.method === 'POST') {
-			response = await withAuth(request, env, handleAtcoderGenerate);
-		} else if (url.pathname === '/api/atcoder-verify/status' && request.method === 'GET') {
-			response = await withAuth(request, env, handleAtcoderStatus);
-		} else if (url.pathname === '/api/atcoder-verify' && request.method === 'POST') {
-			response = await withAuth(request, env, handleAtcoderVerify);
-		} else if (url.pathname === '/api/codechef-verify/generate' && request.method === 'POST') {
-			response = await withAuth(request, env, handleCodechefGenerate);
-		} else if (url.pathname === '/api/codechef-verify/status' && request.method === 'GET') {
-			response = await withAuth(request, env, handleCodechefStatus);
-		} else if (url.pathname === '/api/codechef-verify' && request.method === 'POST') {
-			response = await withAuth(request, env, handleCodechefVerify);
-		} else if (url.pathname === '/api/leetcode-data' && request.method === 'GET') {
-			response = await withAuth(request, env, handleLeetCodeData);
-		} else if (url.pathname === '/api/codeforces-data' && request.method === 'GET') {
-			response = await withAuth(request, env, handleCodeforcesData);
-		} else if (url.pathname === '/api/atcoder-data' && request.method === 'GET') {
-			response = await withAuth(request, env, handleAtcoderData);
-		} else if (url.pathname === '/api/user' && request.method === 'GET') {
-			response = await withAuth(request, env, handleGetUser);
-		} else if (url.pathname === '/api/codechef-data-test' && request.method === 'GET') {
-			response = await handleCodechefDataTest(request);
-		} else {
-			response = new Response('Hello World!');
-		}
-		return withCORSHeaders(response);
-	},
+    return withCORSHeaders(new Response('Not found', { status: 404 }));
+  },
 } satisfies ExportedHandler<Env>;

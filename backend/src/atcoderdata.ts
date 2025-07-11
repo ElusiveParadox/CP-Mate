@@ -4,6 +4,7 @@ import { load as cheerioLoad } from 'cheerio';
 // Scrape AtCoder contest history from the user's history page
 export async function fetchAndStoreAtcoderSubmissions(userHandle: string, userId: string) {
   const url = `https://atcoder.jp/users/${userHandle}/history`;
+  console.log(url,"url")
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
@@ -29,7 +30,7 @@ export async function fetchAndStoreAtcoderSubmissions(userHandle: string, userId
     if (!contestId) continue;
     // Store as AtcoderProfile row (using contestId as problemId for uniqueness)
     const stored = await prisma.atcoderProfile.upsert({
-      where: { userId_id: { userId, id: BigInt(contestId.split('-').pop() || '0') } },
+      where: { userId_id: { userId, id: String(contestId.split('-').pop() || '0') } },
       update: {
         contestId,
         problemId: contestId, // Not a problem, but for uniqueness
@@ -41,7 +42,7 @@ export async function fetchAndStoreAtcoderSubmissions(userHandle: string, userId
         submittedAt: null,
       },
       create: {
-        id: BigInt(contestId.split('-').pop() || '0'),
+        id: (contestId.split('-').pop() || '0'),
         userId,
         contestId,
         problemId: contestId,
